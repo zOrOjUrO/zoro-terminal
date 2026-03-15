@@ -32,6 +32,18 @@ public class TerminalView extends JPanel {
         int prefHeight = buffer.getHeight() * charHeight;
         this.setPreferredSize(new Dimension(prefWidth, prefHeight));
         this.setFocusable(true);
+
+        this.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int newWidth = getWidth() / charWidth;
+                int newHeight = getHeight() / charHeight;
+                if (newWidth > 0 && newHeight > 0) {
+                    buffer.resize(newWidth, newHeight);
+                    repaint();
+                }
+            }
+        });
     }
 
     public int getCharWidth() {

@@ -6,6 +6,7 @@ import java.util.List;
 
 public class Line {
     private final List<Cell> cells;
+    private boolean wrapped = false;
 
     public Line(int width, short initialAttributes) {
         this.cells = new ArrayList<>(width);
@@ -20,6 +21,14 @@ public class Line {
 
     public int getWidth() {
         return cells.size();
+    }
+
+    public boolean isWrapped() {
+        return wrapped;
+    }
+
+    public void setWrapped(boolean wrapped) {
+        this.wrapped = wrapped;
     }
 
     public void clearLine(short attributes) {

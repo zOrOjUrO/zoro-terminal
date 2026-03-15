@@ -162,4 +162,91 @@ class TerminalBufferTest {
         assertFalse((style & (1 << 9)) != 0, "Italic bit should not be set");
         assertTrue((style & (1 << 10)) != 0, "Underline bit should be set");
     }
+
+    @Test
+    void testResizeReflow_ShrinkWidth() {
+        // Write long line on 10 char width (14 chars total)
+        buffer.write("12345678901234");
+        
+        // Assert initial layout
+        assertEquals(4, buffer.getCursorX());
+        assertEquals(1, buffer.getCursorY());
+        assertTrue(buffer.getScreen().get(0).isWrapped());
+        assertFalse(buffer.getScreen().get(1).isWrapped());
+        
+        // Resize down to 5 width
+        buffer.resize(5, 5);
+        assertEquals(5, buffer.getWidth());
+        
+        // Logical "12345678901234" spread across 5 char chunks ->
+        // [0]: "12345" wrapped
+        // [1]: "67890" wrapped
+        // [2]: "1234 " not wrapped
+        // Resize keeps the cursor on the same screen row, so row [0] may move
+        // into scrollback while still remaining available via getAllLines().
+        assertEquals(4, buffer.getCursorX());
+        assertEquals(1, buffer.getCursorY());
+
+        // Visible rows after resize are [1] and [2].
+        assertEquals('6', buffer.getScreen().get(0).getLine().get(0).getCharacter());
+        assertEquals('0', buffer.getScreen().get(0).getLine().get(4).getCharacter());
+        assertEquals('1', buffer.getScreen().get(1).getLine().get(0).getCharacter());
+        assertEquals('4', buffer.getScreen().get(1).getLine().get(3).getCharacter());
+
+        // No text is lost: [0] remains in history/all-lines.
+        assertEquals('1', buffer.getAllLines().get(0).getLine().get(0).getCharacter());
+        assertEquals('5', buffer.getAllLines().get(0).getLine().get(4).getCharacter());
+    }
+
+    @Test
+    void testResizeReflow_GrowWidth() {
+        buffer.write("12345678901234"); // 14 chars on 10-char width
+        
+        // Resize up to 20 width
+        buffer.resize(20, 5);
+        assertEquals(20, buffer.getWidth());
+        
+        // Everything should now fit on one line!
+        // [0]: "12345678901234      " not wrapped
+        assertEquals(14, buffer.getCursorX());
+        assertEquals(0, buffer.getCursorY());
+        
+        assertFalse(buffer.getScreen().get(0).isWrapped());
+        assertEquals('1', buffer.getScreen().get(0).getLine().get(0).getCharacter());
+        assertEquals('0', buffer.getScreen().get(0).getLine().get(9).getCharacter());
+        assertEquals('4', buffer.getScreen().get(0).getLine().get(13).getCharacter());
+        assertEquals(' ', buffer.getScreen().get(0).getLine().get(14).getCharacter());
+    }
+
+    @Test
+    void testResize_HeightChanges() {
+        // Write 8 lines on 5 height buffer (pushes 3 lines to scrollback)
+        for (int i = 0; i < 8; i++) {
+            buffer.write("L" + i);
+            if (i < 7) buffer.insertLine();
+        }
+        
+        assertEquals(height - 1, buffer.getCursorY()); // 4 (bottom of screen)
+        assertEquals(8, buffer.getAllLines().size());
+        
+        // Expand height to 10. Scrollback should pull down.
+        buffer.resize(10, 10);
+        assertEquals(10, buffer.getHeight());
+        
+        // All 8 lines should now fit perfectly on the 10-height screen with 0 scrollback
+        assertEquals(7, buffer.getCursorY());
+        // logical lines created, but getAllLines() returns scrollback + screen + scrollForward
+        // Since screen is height 10, getAllLines() size is 10.
+        // The first 8 are our input, the last 2 are empty padded lines.
+        assertEquals(10, buffer.getAllLines().size()); 
+        
+        // Shrink height back to 3
+        buffer.resize(10, 3);
+        assertEquals(3, buffer.getHeight());
+        
+        // Cursor should cap at bottom of the new smaller screen (height 3 -> bottom is y=2)
+        assertEquals(2, buffer.getCursorY());
+        // Empty lines at the bottom created when expanding height will be pushed to scrollForward. Total lines is 10.
+        assertEquals(10, buffer.getAllLines().size());
+    }
 }

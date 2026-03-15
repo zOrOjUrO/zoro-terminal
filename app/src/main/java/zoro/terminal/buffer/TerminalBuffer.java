@@ -11,8 +11,8 @@ import zoro.terminal.model.Line;
 
 public class TerminalBuffer {
     // Configuration
-    private final int width;
-    private final int height;
+    private int width;
+    private int height;
     private final int maxScrollback;
 
     // State
@@ -80,6 +80,7 @@ public class TerminalBuffer {
                 this.cursorX++;
             }
             else {
+                screen.get(this.cursorY).setWrapped(true);
                 this.cursorX = 0;
                 insertLine();
                 line = screen.get(this.cursorY).getLine();
@@ -181,6 +182,142 @@ public class TerminalBuffer {
         }
         this.cursorX = 0;
         this.cursorY = 0;
+    }
+
+    public void resize(int newWidth, int newHeight) {
+        if (newWidth <= 0 || newHeight <= 0) return;
+        if (this.width == newWidth && this.height == newHeight) return;
+
+        List<Line> allLines = getAllLines();
+        int targetPhysLine = scrollback.size() + this.cursorY;
+        int logicalLineOfCursor = -1;
+        int cellIndexOfCursor = -1;
+
+        List<List<Cell>> logicalLines = new ArrayList<>();
+        List<Cell> currentLogical = new ArrayList<>();
+
+        for (int row = 0; row < allLines.size(); row++) {
+            Line l = allLines.get(row);
+            boolean hasCursor = (row == targetPhysLine);
+            
+            int end = l.isWrapped() ? l.getWidth() - 1 : getLastNonEmpty(l);
+            if (hasCursor && this.cursorX > end) {
+                end = this.cursorX;
+            }
+            
+            if (hasCursor) {
+                logicalLineOfCursor = logicalLines.size();
+                cellIndexOfCursor = currentLogical.size() + this.cursorX;
+            }
+
+            for(int i = 0; i <= end; i++) {
+                currentLogical.add(l.getLine().get(i));
+            }
+            
+            if (!l.isWrapped()) {
+                logicalLines.add(currentLogical);
+                currentLogical = new ArrayList<>();
+            }
+        }
+        if (!currentLogical.isEmpty()) {
+            logicalLines.add(currentLogical);
+        }
+
+        List<Line> newAllLines = new ArrayList<>();
+        int newCursorRow = -1;
+        int newCursorCol = -1;
+        short attr = packAttributes();
+
+        for (int i = 0; i < logicalLines.size(); i++) {
+            List<Cell> logical = logicalLines.get(i);
+            if (logical.isEmpty()) {
+                if (i == logicalLineOfCursor) {
+                    newCursorRow = newAllLines.size();
+                    newCursorCol = 0;
+                }
+                newAllLines.add(new Line(newWidth, attr));
+                continue;
+            }
+            
+            int startOfPhys = 0;
+            while (startOfPhys < logical.size()) {
+                Line phys = new Line(newWidth, attr);
+                int copyLen = Math.min(newWidth, logical.size() - startOfPhys);
+                for (int j = 0; j < copyLen; j++) {
+                    phys.getLine().set(j, logical.get(startOfPhys + j));
+                }
+                
+                if (i == logicalLineOfCursor) {
+                    if (cellIndexOfCursor >= startOfPhys && cellIndexOfCursor < startOfPhys + newWidth) {
+                        newCursorRow = newAllLines.size();
+                        newCursorCol = cellIndexOfCursor - startOfPhys;
+                    } else if (cellIndexOfCursor == logical.size() && startOfPhys + copyLen == logical.size()) {
+                        if (copyLen < newWidth) {
+                            newCursorRow = newAllLines.size();
+                            newCursorCol = copyLen;
+                        }
+                    }
+                }
+                
+                startOfPhys += copyLen;
+                if (startOfPhys < logical.size()) {
+                    phys.setWrapped(true);
+                }
+                newAllLines.add(phys);
+            }
+            if (i == logicalLineOfCursor && newCursorRow == -1) {
+                newCursorRow = newAllLines.size();
+                newCursorCol = 0;
+                newAllLines.add(new Line(newWidth, attr));
+            }
+        }
+
+        if (newAllLines.isEmpty()) newAllLines.add(new Line(newWidth, attr));
+        if (newCursorRow == -1) { newCursorRow = 0; newCursorCol = 0; }
+
+        int cursorScreenOffset = Math.min(newHeight - 1, this.cursorY);
+        int screenStart = Math.max(0, newCursorRow - cursorScreenOffset);
+        if (screenStart + newHeight > newAllLines.size()) {
+            screenStart = Math.max(0, newAllLines.size() - newHeight);
+        }
+
+        this.scrollback.clear();
+        this.screen.clear();
+        this.scrollForward.clear();
+        
+        for (int i = 0; i < newAllLines.size(); i++) {
+            if (i < screenStart) {
+                scrollback.add(newAllLines.get(i));
+                if (scrollback.size() > maxScrollback) scrollback.removeFirst();
+            } else if (i < screenStart + newHeight) {
+                screen.add(newAllLines.get(i));
+            } else {
+                scrollForward.add(newAllLines.get(i));
+            }
+        }
+        
+        while (screen.size() < newHeight) {
+            screen.add(new Line(newWidth, attr));
+        }
+
+        this.width = newWidth;
+        this.height = newHeight;
+        this.cursorX = newCursorCol;
+        this.cursorY = newCursorRow - screenStart;
+        if (this.cursorY < 0) this.cursorY = 0;
+        
+        this.clearSelection();
+    }
+
+    private int getLastNonEmpty(Line l) {
+        List<Cell> cells = l.getLine();
+        for (int i = cells.size() - 1; i >= 0; i--) {
+            Cell c = cells.get(i);
+            if (c.getCharacter() != ' ' || c.getBackgroundColor() != 0 || c.getStyle() != 0 || c.getForegroundColor() != 7) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public void scrollUp() {
