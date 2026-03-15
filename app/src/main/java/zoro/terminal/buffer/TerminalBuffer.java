@@ -22,7 +22,6 @@ public class TerminalBuffer {
     private int cursorX;
     private int cursorY;
     private boolean insertMode;    
-    private int viewOffset; // 0 = viewing active screen, > 0 = scrolling back into history
     
     // Current pen attributes
     private int currentFg;
@@ -40,7 +39,6 @@ public class TerminalBuffer {
         this.screen = new ArrayList<>(height);
         this.cursorX = 0;
         this.cursorY = 0;
-        this.viewOffset = 0;
         this.currentFg = 7;
         this.currentBg = 0;
 
@@ -50,13 +48,28 @@ public class TerminalBuffer {
     }
 
     public void write(String text) {
-        this.viewOffset = 0; // Snap to bottom when typing
+        // Snap back to present if we are scrolled up
+        while (!scrollForward.isEmpty()) {
+            scrollback.addLast(screen.remove(0));
+            screen.add(scrollForward.removeFirst());
+            if (scrollback.size() > maxScrollback) scrollback.removeFirst();
+        }
+        
         List<Cell> line = screen.get(this.cursorY).getLine();
         short attr = packAttributes();
         
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
+            
+            if (this.insertMode) {
+                // Shift remainder of the line to the right
+                for (int j = width - 1; j > this.cursorX; j--) {
+                    line.set(j, line.get(j - 1));
+                }
+            }
+            
             line.set(this.cursorX, new Cell(ch, attr, CellKind.NORMAL));
+            
             if (this.cursorX < width - 1) {
                 this.cursorX++;
             }
@@ -69,7 +82,13 @@ public class TerminalBuffer {
     }
 
     public void insertLine() {
-        this.viewOffset = 0; // Snap to bottom when pushing new lines
+        // Snap back to present if we are scrolled up
+        while (!scrollForward.isEmpty()) {
+            scrollback.addLast(screen.remove(0));
+            screen.add(scrollForward.removeFirst());
+            if (scrollback.size() > maxScrollback) scrollback.removeFirst();
+        }
+
         if (this.cursorY == this.height - 1) {
             scrollback.addLast(screen.remove(0));
             if (scrollback.size() > maxScrollback) {
@@ -118,7 +137,8 @@ public class TerminalBuffer {
             this.cursorY--;
         } else if (this.cursorY == 0 && !scrollback.isEmpty()) {
             // Scroll screen down into history.
-            screen.remove(screen.size() - 1);
+            // Save the line that falls off the bottom so we can come back to it.
+            scrollForward.addFirst(screen.remove(screen.size() - 1));
             screen.add(0, scrollback.removeLast());
         }
     }
@@ -155,38 +175,28 @@ public class TerminalBuffer {
         }
         this.cursorX = 0;
         this.cursorY = 0;
-        this.viewOffset = 0;
     }
 
     public void scrollUp() {
-        if (this.viewOffset < scrollback.size()) {
-            this.viewOffset++;
+        if (!scrollback.isEmpty()) {
+            scrollForward.addFirst(screen.remove(screen.size() - 1));
+            screen.add(0, scrollback.removeLast());
         }
     }
 
     public void scrollDown() {
-        if (this.viewOffset > 0) {
-            this.viewOffset--;
+        if (!scrollForward.isEmpty()) {
+            scrollback.addLast(screen.remove(0));
+            screen.add(scrollForward.removeFirst());
         }
-    }
-
-    public void pageUp() {
-        this.viewOffset = Math.min(scrollback.size(), this.viewOffset + Math.max(1, height / 2));
-    }
-
-    public void pageDown() {
-        this.viewOffset = Math.max(0, this.viewOffset - Math.max(1, height / 2));
     }
 
     public void toggleInsertMode() {
-        if (this.insertMode) {
-            // TODO: maybe change the cursor shape or color to indicate insert mode.
-            this.cursorX = Math.max(this.cursorX - 1, 0);
-        } else {
-            // Revert cursor shape or color if needed.
-            this.cursorX = Math.min(this.cursorX + 1, width - 1);
-        }
         this.insertMode = !this.insertMode;
+    }
+
+    public boolean isInsertMode() {
+        return this.insertMode;
     }
 
     public void handleBackspace() {
@@ -207,6 +217,23 @@ public class TerminalBuffer {
         }
     }
 
+    public void handleDelete() {
+        if (this.cursorX < width - 1) {
+            screen.get(this.cursorY).getLine().set(this.cursorX, Cell.empty(packAttributes()));
+            // Shift the rest of the line left
+            for (int i = this.cursorX; i < width - 1; i++) {
+                Cell nextCell = screen.get(this.cursorY).getLine().get(i + 1);
+                screen.get(this.cursorY).getLine().set(i, nextCell);
+            }
+            screen.get(this.cursorY).getLine().set(width - 1, Cell.empty(packAttributes()));
+        } else if (this.cursorY < height - 1) {
+            // Shift lines up
+            for (int i = this.cursorY; i < height - 1; i++) {
+                screen.set(i, screen.get(i + 1));
+            }
+            screen.set(height - 1, new Line(width, packAttributes()));
+        }
+    }
 
     public short packAttributes() {
         // 4 bits fg, 4 bits bg, 3 bits style flags.
@@ -231,20 +258,7 @@ public class TerminalBuffer {
     }
 
     public List<Line> getScreen() {
-        if (viewOffset == 0) {
-            return screen;
-        }
-        
-        List<Line> combined = getAllLines();
-        // Calculate the slice visible based on viewOffset relative to the current active screen
-        int currentScreenStart = scrollback.size();
-        int start = Math.max(0, currentScreenStart - viewOffset);
-        int end = Math.min(combined.size(), start + height);
-        return combined.subList(start, end);
-    }
-
-    public int getViewOffset() {
-        return viewOffset;
+        return screen;
     }
 
     public List<Line> getAllLines() {

@@ -34,6 +34,13 @@ public class TerminalView extends JPanel {
         this.setFocusable(true);
     }
 
+    public void setPaletteColor(int index, Color color) {
+        if (index >= 0 && index < colors.length) {
+            colors[index] = color;
+            repaint();
+        }
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -68,7 +75,7 @@ public class TerminalView extends JPanel {
 
                 // Draw Foreground Text
                 int cp = cell.getCharacter();
-                if (cp > 0 && cp != ' ') {
+                if (cp > 0) {
                     g2d.setColor(colors[cell.getForegroundColor() % 16]);
                     
                     // Handle Styles (Bold, Italic)
@@ -92,7 +99,8 @@ public class TerminalView extends JPanel {
                     // Handle Underline
                     boolean isUnderline = (style & (1 << 10)) != 0;
                     if (isUnderline) {
-                        g2d.drawLine(drawX, drawY + fontAscent + 2, drawX + charWidth, drawY + fontAscent + 2);
+                        int underlineY = drawY + charHeight - 2;
+                        g2d.drawLine(drawX, underlineY, drawX + charWidth, underlineY);
                     }
                 }
             }
@@ -100,23 +108,28 @@ public class TerminalView extends JPanel {
 
         // Cursor
         int cx = buffer.getCursorX() * charWidth;
-        int cy = buffer.getCursorY() * charHeight;
-        
+        int cy = buffer.getCursorY() * charHeight; 
+
         g2d.setColor(Color.WHITE); // Cursor color
-        // Simple block cursor. 
-        // TODO: Change if in Insert Mode
-        g2d.fillRect(cx, cy, charWidth, charHeight);
         
-        // Draw the character under the cursor in invert (black on white)
-        if (buffer.getCursorY() < screenLines.size()) {
-            Line line = screenLines.get(buffer.getCursorY());
-            if (buffer.getCursorX() < line.getWidth()) {
-                Cell cell = line.getLine().get(buffer.getCursorX());
-                int cp = cell.getCharacter();
-                if (cp > 0 && cp != ' ') {
-                    g2d.setColor(Color.BLACK);
-                    g2d.setFont(font);
-                    g2d.drawString(String.valueOf((char) cp), cx, cy + fontAscent);
+        if (buffer.isInsertMode()) {
+            // In insert mode, draw a vertical bar cursor
+            g2d.fillRect(cx, cy, 2, charHeight);
+        } else {
+            // In overwrite mode, draw a block cursor
+            g2d.fillRect(cx, cy, charWidth, charHeight);
+            
+            // Draw the character under the block cursor in invert (black on white)
+            if (buffer.getCursorY() < screenLines.size()) {
+                Line line = screenLines.get(buffer.getCursorY());
+                if (buffer.getCursorX() < line.getWidth()) {
+                    Cell cell = line.getLine().get(buffer.getCursorX());
+                    int cp = cell.getCharacter();
+                    if (cp > 0 && cp != ' ') {
+                        g2d.setColor(Color.BLACK);
+                        g2d.setFont(font);
+                        g2d.drawString(String.valueOf((char) cp), cx, cy + fontAscent);
+                    }
                 }
             }
         }

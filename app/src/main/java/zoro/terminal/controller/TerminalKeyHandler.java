@@ -2,14 +2,14 @@ package zoro.terminal.controller;
 
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import javax.swing.JComponent;
+import zoro.terminal.ui.TerminalView;
 import zoro.terminal.buffer.TerminalBuffer;
 
 public class TerminalKeyHandler extends KeyAdapter {
     private final TerminalBuffer buffer;
-    private final JComponent view;
+    private final TerminalView view;
 
-    public TerminalKeyHandler(TerminalBuffer buffer, JComponent view) {
+    public TerminalKeyHandler(TerminalBuffer buffer, TerminalView view) {
         this.buffer = buffer;
         this.view = view;
     }
@@ -30,7 +30,7 @@ public class TerminalKeyHandler extends KeyAdapter {
                 buffer.moveCursor((short) 3);
                 break;
             case KeyEvent.VK_INSERT:
-                buffer.toggleInsertMode();
+                this.buffer.toggleInsertMode();
                 break;
             case KeyEvent.VK_HOME:
                 buffer.clearScreen();
@@ -47,14 +47,23 @@ public class TerminalKeyHandler extends KeyAdapter {
             case KeyEvent.VK_TAB:
                 buffer.write("    ");
                 break;
-            case KeyEvent.VK_PAGE_UP:
-                buffer.pageUp();
+            case KeyEvent.VK_F1:
+                buffer.setCurrentFg((buffer.getCurrentFg() + 1) % 16);
                 break;
-            case KeyEvent.VK_PAGE_DOWN:
-                buffer.pageDown();
+            case KeyEvent.VK_F2:
+                buffer.setCurrentBg((buffer.getCurrentBg() + 1) % 16);
+                break;
+            case KeyEvent.VK_B:
+                if (e.isControlDown()) buffer.setBold(!buffer.isBold());
+                break;
+            case KeyEvent.VK_I:
+                if (e.isControlDown()) buffer.setItalic(!buffer.isItalic());
+                break;
+            case KeyEvent.VK_U:
+                if (e.isControlDown()) buffer.setUnderline(!buffer.isUnderline());
                 break;
             case KeyEvent.VK_DELETE:
-                // TODO: implement delete key handling.
+                buffer.handleDelete();
                 break;
             case KeyEvent.VK_SPACE:
                 buffer.write(" ");
@@ -71,7 +80,7 @@ public class TerminalKeyHandler extends KeyAdapter {
     @Override
     public void keyTyped(KeyEvent e) {
         // Ignore control characters, let keyPressed handle them
-        if (Character.isISOControl(e.getKeyChar())) {
+        if (Character.isISOControl(e.getKeyChar()) || e.isControlDown() || e.isAltDown() || e.isMetaDown()) {
             return;
         }
         buffer.write(String.valueOf(e.getKeyChar()));

@@ -47,7 +47,7 @@ public final class Cell {
     }
 
     public int getStyle() {
-        return this.attributes & (0xF << 10); // B | I | U
+        return this.attributes & (7 << 8); // B | I | U
     }
 
     public void setStyle(boolean isBold, boolean isItalic, boolean isUnderline){

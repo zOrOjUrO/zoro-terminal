@@ -8,6 +8,7 @@ import javax.swing.SwingUtilities;
 
 import zoro.terminal.buffer.TerminalBuffer;
 import zoro.terminal.controller.TerminalKeyHandler;
+import zoro.terminal.controller.TerminalMouseHandler;
 import zoro.terminal.ui.TerminalView;
 
 public class App {
@@ -16,9 +17,12 @@ public class App {
             // 80 columns, 24 rows, 1000 lines scrollback
             TerminalBuffer buffer = new TerminalBuffer(80, 24, 1000);
             TerminalView view = new TerminalView(buffer);
+            
             TerminalKeyHandler keyHandler = new TerminalKeyHandler(buffer, view);
+            TerminalMouseHandler mouseHandler = new TerminalMouseHandler(buffer, view);
             
             view.addKeyListener(keyHandler);
+            view.addMouseWheelListener(mouseHandler);
 
             JFrame frame = new JFrame("Zoro Terminal");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
