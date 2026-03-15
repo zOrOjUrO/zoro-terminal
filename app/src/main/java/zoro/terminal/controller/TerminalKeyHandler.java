@@ -48,8 +48,13 @@ public class TerminalKeyHandler extends KeyAdapter {
                 // TODO: implement escape key handling.
                 break;
             default:
-                buffer.write(String.valueOf(e.getKeyChar()));
                 break;
         }
+    }
+
+    @Override
+    public void keyTyped(KeyEvent e) {
+        // Handled in keyPressed for better control over special keys.
+        buffer.write(String.valueOf(e.getKeyChar()));
     }
 }

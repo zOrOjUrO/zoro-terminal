@@ -2,6 +2,8 @@ package zoro.terminal.buffer;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.ArrayList;
+import java.util.List;
 
 import zoro.terminal.model.Line;
 
@@ -12,9 +14,11 @@ public class TerminalBuffer {
     private final int maxScrollback;
 
     // State
-    private final Deque<Line> allLines;
+    private final Deque<Line> scrollback;
+    private final List<Line> screen;
     private int cursorX;
     private int cursorY;
+    private boolean insertMode;
 
     // Current pen attributes
     private int currentFg;
@@ -27,23 +31,43 @@ public class TerminalBuffer {
         this.width = width;
         this.height = height;
         this.maxScrollback = maxScrollback;
-        this.allLines = new ArrayDeque<>();
+        this.scrollback = new ArrayDeque<>();
+        this.screen = new ArrayList<>(height);
         this.cursorX = 0;
         this.cursorY = 0;
         this.currentFg = 7;
         this.currentBg = 0;
 
         for (int i = 0; i < height; i++) {
-            this.allLines.addLast(new Line(width, packAttributes()));
+            this.screen.add(new Line(width, packAttributes()));
         }
     }
 
     public void write(String text) {
         // TODO: implement write logic with wrapping and wide-character handling.
+        List<Cell> cells = screen.get(cursorY).getLine();
+        short attr = packAttributes();
+        
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            cells.set(cursorX, new Cell(ch, attr, CellKind.NORMAL));
+            cursorX = Math.min(cursorX + 1, width - 1);
+        }
     }
 
     public void insertLine() {
         // TODO: implement rolling window line insertion.
+        if (cursorY == height - 1) {
+            // Pushing down creates a new line and pushes top to history
+            scrollback.addLast(screen.remove(0));
+            if (scrollback.size() > maxScrollback) {
+                scrollback.removeFirst();
+            }
+            screen.add(new Line(width, packAttributes()));
+        } else {
+            cursorY++;
+        }
+        cursorX = 0;
     }
 
     public void moveCursor(short direction) {
@@ -60,6 +84,9 @@ public class TerminalBuffer {
         // TODO: implement cursor movement left.
         if (cursorX > 0) {
             cursorX--;
+        } else if (cursorY > 0) {
+            cursorY--;
+            cursorX = width - 1;
         }
     }
 
@@ -67,6 +94,9 @@ public class TerminalBuffer {
         // TODO: implement cursor movement right.
         if (cursorX < width - 1) {
             cursorX++;
+        } else if (cursorY < height - 1) {
+            cursorY++;
+            cursorX = 0;
         }
     }
 
@@ -74,35 +104,69 @@ public class TerminalBuffer {
         // TODO: implement cursor movement up.
         if (cursorY > 0) {
             cursorY--;
+        } else if (cursorY == 0 && !scrollback.isEmpty()) {
+            // Scroll screen down into history.
+            screen.remove(screen.size() - 1);
+            screen.add(0, scrollback.removeLast());
         }
     }
 
     private void moveCursorDown(){
         // TODO: implement cursor movement down.
         if (cursorY < height - 1) {
-            cursorY++;
+           cursorY++;
+        } else if (cursorY == height - 1) {
+            // Scroll screen up, saving top line to history.
+            scrollback.addLast(screen.remove(0));
+            if (scrollback.size() > maxScrollback) {
+                scrollback.removeFirst();
+            }
+            screen.add(new Line(width, packAttributes()));
         }
     }
 
     public void clearScreen() {
-        // TODO: clear only visible screen lines.
+        for (Line line : screen) {
+            line.clearLine(packAttributes());
+        }
     }
 
     public void clearAll() {
-        // TODO: wipe full deque and recreate screen region.
+        scrollback.clear();
+        screen.clear();
+        for (int i = 0; i < height; i++) {
+            this.screen.add(new Line(width, packAttributes()));
+        }
+        cursorX = 0;
+        cursorY = 0;
     }
 
     public void toggleInsertMode() {
-        // TODO: toggle insert mode.
+        if (this.insertMode) {
+            // TODO: maybe change the cursor shape or color to indicate insert mode.
+            this.cursorX = Math.max(cursorX - 1, 0);
+        } else {
+            // Revert cursor shape or color if needed.
+            this.cursorX = Math.min(cursorX + 1, width - 1);
+        }
+        this.insertMode = !this.insertMode;
     }
 
     public void handleBackspace() {
         // TODO: implement backspace handling.
         if (cursorX > 0) {
             cursorX--;
+            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
         } else if (cursorY > 0) {
             cursorY--;
             cursorX = width - 1;
+            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
+        } else if (cursorY == 0 && !scrollback.isEmpty()) {
+            // Pull previous line from scrollback
+            screen.remove(screen.size() - 1);
+            screen.add(0, scrollback.removeLast());
+            cursorX = width - 1;
+            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
         }
     }
 
@@ -129,8 +193,15 @@ public class TerminalBuffer {
         return maxScrollback;
     }
 
-    public Deque<Line> getAllLines() {
-        return allLines;
+    public List<Line> getScreen() {
+        return screen;
+    }
+
+
+    public List<Line> getAllLines() {
+        List<Line> combined = new ArrayList<>(scrollback);
+        combined.addAll(screen);
+        return combined;
     }
 
     public int getCursorX() {

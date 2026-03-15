@@ -23,16 +23,15 @@ public final class Cell {
     public static Cell normal(short attributes) {return new Cell(' ', attributes, CellKind.NORMAL);}
 
     public int getCharacter() {
-        return character;
+        return this.character;
     }
 
     public void setCharacter(int character) {
         this.character = character;
     }
 
-    //TODO: bit-mask to extract the three attributes
     public short getAttributes() {
-        return attributes;
+        return this.attributes;
     }
 
     public void setAttributes(short attributes) {
@@ -59,7 +58,7 @@ public final class Cell {
     }
 
     public CellKind getKind() {
-        return kind;
+        return this.kind;
     }
 
     public void setKind(CellKind kind) {
