@@ -34,6 +34,14 @@ public class TerminalView extends JPanel {
         this.setFocusable(true);
     }
 
+    public int getCharWidth() {
+        return charWidth;
+    }
+
+    public int getCharHeight() {
+        return charHeight;
+    }
+
     public void setPaletteColor(int index, Color color) {
         if (index >= 0 && index < colors.length) {
             colors[index] = color;
@@ -68,7 +76,10 @@ public class TerminalView extends JPanel {
                 
                 // Draw Background
                 Color bgColor = colors[cell.getBackgroundColor() % 16];
-                if (!bgColor.equals(Color.BLACK)) { // Avoid repaint black over black
+                if (buffer.isSelected(x, y)) {
+                    g2d.setColor(Color.WHITE); // Selection background color
+                    g2d.fillRect(drawX, drawY, charWidth, charHeight);
+                } else if (!bgColor.equals(Color.BLACK)) { // Avoid repaint black over black
                     g2d.setColor(bgColor);
                     g2d.fillRect(drawX, drawY, charWidth, charHeight);
                 }
@@ -76,7 +87,11 @@ public class TerminalView extends JPanel {
                 // Draw Foreground Text
                 int cp = cell.getCharacter();
                 if (cp > 0) {
-                    g2d.setColor(colors[cell.getForegroundColor() % 16]);
+                    if (buffer.isSelected(x, y)) {
+                        g2d.setColor(Color.BLACK); // Selection text color
+                    } else {
+                        g2d.setColor(colors[cell.getForegroundColor() % 16]);
+                    }
                     
                     // Handle Styles (Bold, Italic)
                     int style = cell.getStyle();

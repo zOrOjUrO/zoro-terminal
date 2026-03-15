@@ -1,12 +1,15 @@
 package zoro.terminal.controller;
 
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 
 import zoro.terminal.buffer.TerminalBuffer;
 import zoro.terminal.ui.TerminalView;
 
-public class TerminalMouseHandler implements MouseWheelListener {
+public class TerminalMouseHandler implements MouseWheelListener, MouseListener, MouseMotionListener {
     private final TerminalBuffer buffer;
     private final TerminalView view;
 
@@ -33,4 +36,35 @@ public class TerminalMouseHandler implements MouseWheelListener {
         
         view.repaint(); // Redraw UI after scroll
     }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+        int cx = e.getX() / view.getCharWidth();
+        int cy = e.getY() / view.getCharHeight();
+        buffer.setSelectionStart(cx, cy);
+        view.repaint();
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+        int cx = e.getX() / view.getCharWidth();
+        int cy = e.getY() / view.getCharHeight();
+        buffer.setSelectionEnd(cx, cy);
+        view.repaint();
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {}
+
+    @Override
+    public void mouseClicked(MouseEvent e) {}
+
+    @Override
+    public void mouseEntered(MouseEvent e) {}
+
+    @Override
+    public void mouseExited(MouseEvent e) {}
+
+    @Override
+    public void mouseMoved(MouseEvent e) {}
 }

@@ -23,6 +23,8 @@ public class App {
             
             view.addKeyListener(keyHandler);
             view.addMouseWheelListener(mouseHandler);
+            view.addMouseListener(mouseHandler);
+            view.addMouseMotionListener(mouseHandler);
 
             JFrame frame = new JFrame("Zoro Terminal");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

@@ -30,6 +30,12 @@ public class TerminalBuffer {
     private boolean isItalic;
     private boolean isUnderline;
 
+    // Selection State
+    private int selStartX = -1;
+    private int selStartY = -1;
+    private int selEndX = -1;
+    private int selEndY = -1;
+
     public TerminalBuffer(int width, int height, int maxScrollback) {
         this.width = width;
         this.height = height;
@@ -197,6 +203,82 @@ public class TerminalBuffer {
 
     public boolean isInsertMode() {
         return this.insertMode;
+    }
+
+    public void setSelectionStart(int x, int y) {
+        selStartX = Math.max(0, Math.min(width - 1, x));
+        selStartY = Math.max(0, Math.min(getAllLines().size() - 1, scrollback.size() + y));
+        selEndX = selStartX;
+        selEndY = selStartY;
+    }
+
+    public void setSelectionEnd(int x, int y) {
+        selEndX = Math.max(0, Math.min(width - 1, x));
+        selEndY = Math.max(0, Math.min(getAllLines().size() - 1, scrollback.size() + y));
+    }
+
+    public void clearSelection() {
+        selStartX = -1;
+        selStartY = -1;
+        selEndX = -1;
+        selEndY = -1;
+    }
+
+    public boolean hasSelection() {
+        return selStartX != -1;
+    }
+
+    public boolean isSelected(int screenX, int screenY) {
+        if (!hasSelection()) return false;
+        int absY = scrollback.size() + screenY;
+        
+        int startY = Math.min(selStartY, selEndY);
+        int endY = Math.max(selStartY, selEndY);
+        int startX = selStartY < selEndY ? selStartX : (selStartY > selEndY ? selEndX : Math.min(selStartX, selEndX));
+        int endX = selStartY < selEndY ? selEndX : (selStartY > selEndY ? selStartX : Math.max(selStartX, selEndX));
+
+        if (absY < startY || absY > endY) return false;
+        if (absY == startY && absY == endY) {
+            return screenX >= startX && screenX <= endX;
+        }
+        if (absY == startY) return screenX >= startX;
+        if (absY == endY) return screenX <= endX;
+        return true;
+    }
+
+    public String getSelectedText() {
+        if (!hasSelection()) return "";
+        int startY = Math.min(selStartY, selEndY);
+        int endY = Math.max(selStartY, selEndY);
+        int startX = selStartY < selEndY ? selStartX : (selStartY > selEndY ? selEndX : Math.min(selStartX, selEndX));
+        int endX = selStartY < selEndY ? selEndX : (selStartY > selEndY ? selStartX : Math.max(selStartX, selEndX));
+
+        List<Line> lines = getAllLines();
+        StringBuilder sb = new StringBuilder();
+
+        for (int y = startY; y <= endY; y++) {
+            if (y >= lines.size()) break;
+            Line line = lines.get(y);
+            int x1 = (y == startY) ? startX : 0;
+            int x2 = (y == endY) ? endX : line.getWidth() - 1;
+            
+            StringBuilder lineStr = new StringBuilder();
+            for (int x = x1; x <= x2; x++) {
+                int ch = line.getLine().get(x).getCharacter();
+                lineStr.append(ch == 0 ? ' ' : (char)ch);
+            }
+            
+            // Trim right side of lines that aren't the last selected line
+            String lStr = lineStr.toString();
+            if (y < endY) {
+                int lastChar = lStr.length() - 1;
+                while(lastChar >= 0 && lStr.charAt(lastChar) == ' ') lastChar--;
+                sb.append(lStr.substring(0, lastChar + 1)).append("\n");
+            } else {
+                sb.append(lStr);
+            }
+        }
+        return sb.toString();
     }
 
     public void handleBackspace() {

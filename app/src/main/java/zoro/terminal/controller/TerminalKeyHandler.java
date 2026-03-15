@@ -2,6 +2,13 @@ package zoro.terminal.controller;
 
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
+import java.io.OutputStream;
+import java.io.PrintStream;
+
 import zoro.terminal.ui.TerminalView;
 import zoro.terminal.buffer.TerminalBuffer;
 
@@ -62,6 +69,12 @@ public class TerminalKeyHandler extends KeyAdapter {
             case KeyEvent.VK_U:
                 if (e.isControlDown()) buffer.setUnderline(!buffer.isUnderline());
                 break;
+            case KeyEvent.VK_V:
+                if (e.isControlDown() && e.isShiftDown()) handlePaste();
+                break;
+            case KeyEvent.VK_C:
+                if (e.isControlDown() && e.isShiftDown()) handleCopy();
+                break;
             case KeyEvent.VK_DELETE:
                 buffer.handleDelete();
                 break;
@@ -83,7 +96,44 @@ public class TerminalKeyHandler extends KeyAdapter {
         if (Character.isISOControl(e.getKeyChar()) || e.isControlDown() || e.isAltDown() || e.isMetaDown()) {
             return;
         }
+        buffer.clearSelection();
         buffer.write(String.valueOf(e.getKeyChar()));
         view.repaint(); // UI redraw after a char is typed
+    }
+
+    private void handleCopy() {
+        if (buffer.hasSelection()) {
+            String selected = buffer.getSelectedText();
+            StringSelection selection = new StringSelection(selected);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+            buffer.clearSelection();
+            view.repaint();
+        }
+    }
+
+    private void handlePaste() {
+        PrintStream oldErr = System.err;
+        try {
+            // Suppressing the ClassNotFoundException printed internally by Java AWT 
+            System.setErr(new PrintStream(new OutputStream() {
+                public void write(int b) {}
+            }));
+
+            String text = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+            if (text != null) {
+                // Handle newlines in pasted text by splitting and inserting lines
+                String[] lines = text.split("\r\n|\n|\r");
+                for (int i = 0; i < lines.length; i++) {
+                    buffer.write(lines[i]);
+                    if (i < lines.length - 1) {
+                        buffer.insertLine();
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            // Ignore paste errors
+        } finally {
+            System.setErr(oldErr);
+        }
     }
 }
