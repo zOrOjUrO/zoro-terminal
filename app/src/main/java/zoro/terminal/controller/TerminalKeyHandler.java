@@ -1,8 +1,17 @@
+package zoro.terminal.controller;
+
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import javax.swing.JComponent;
+import zoro.terminal.buffer.TerminalBuffer;
+
 public class TerminalKeyHandler extends KeyAdapter {
     private final TerminalBuffer buffer;
+    private final JComponent view;
 
-    public TerminalKeyHandler(TerminalBuffer buffer) {
+    public TerminalKeyHandler(TerminalBuffer buffer, JComponent view) {
         this.buffer = buffer;
+        this.view = view;
     }
 
     @Override
@@ -38,6 +47,12 @@ public class TerminalKeyHandler extends KeyAdapter {
             case KeyEvent.VK_TAB:
                 buffer.write("    ");
                 break;
+            case KeyEvent.VK_PAGE_UP:
+                buffer.pageUp();
+                break;
+            case KeyEvent.VK_PAGE_DOWN:
+                buffer.pageDown();
+                break;
             case KeyEvent.VK_DELETE:
                 // TODO: implement delete key handling.
                 break;
@@ -45,16 +60,21 @@ public class TerminalKeyHandler extends KeyAdapter {
                 buffer.write(" ");
                 break;
             case KeyEvent.VK_ESCAPE:
-                // TODO: implement escape key handling.
+                System.exit(0);
                 break;
             default:
                 break;
         }
+        view.repaint(); // UI redraw after key press
     }
 
     @Override
     public void keyTyped(KeyEvent e) {
-        // Handled in keyPressed for better control over special keys.
+        // Ignore control characters, let keyPressed handle them
+        if (Character.isISOControl(e.getKeyChar())) {
+            return;
+        }
         buffer.write(String.valueOf(e.getKeyChar()));
+        view.repaint(); // UI redraw after a char is typed
     }
 }

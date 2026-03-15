@@ -3,12 +3,31 @@
  */
 package zoro.terminal;
 
-public class App {
-    public String getGreeting() {
-        return "Hello World!";
-    }
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
+import zoro.terminal.buffer.TerminalBuffer;
+import zoro.terminal.controller.TerminalKeyHandler;
+import zoro.terminal.ui.TerminalView;
+
+public class App {
     public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+        SwingUtilities.invokeLater(() -> {
+            // 80 columns, 24 rows, 1000 lines scrollback
+            TerminalBuffer buffer = new TerminalBuffer(80, 24, 1000);
+            TerminalView view = new TerminalView(buffer);
+            TerminalKeyHandler keyHandler = new TerminalKeyHandler(buffer, view);
+            
+            view.addKeyListener(keyHandler);
+
+            JFrame frame = new JFrame("Zoro Terminal");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.add(view);
+            frame.pack();
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+            
+            view.requestFocusInWindow();
+        });
     }
 }

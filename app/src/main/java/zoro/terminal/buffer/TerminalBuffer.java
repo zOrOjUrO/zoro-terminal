@@ -5,6 +5,8 @@ import java.util.Deque;
 import java.util.ArrayList;
 import java.util.List;
 
+import zoro.terminal.model.Cell;
+import zoro.terminal.model.CellKind;
 import zoro.terminal.model.Line;
 
 public class TerminalBuffer {
@@ -15,11 +17,13 @@ public class TerminalBuffer {
 
     // State
     private final Deque<Line> scrollback;
+    private final Deque<Line> scrollForward;
     private final List<Line> screen;
     private int cursorX;
     private int cursorY;
-    private boolean insertMode;
-
+    private boolean insertMode;    
+    private int viewOffset; // 0 = viewing active screen, > 0 = scrolling back into history
+    
     // Current pen attributes
     private int currentFg;
     private int currentBg;
@@ -32,9 +36,11 @@ public class TerminalBuffer {
         this.height = height;
         this.maxScrollback = maxScrollback;
         this.scrollback = new ArrayDeque<>();
+        this.scrollForward = new ArrayDeque<>();
         this.screen = new ArrayList<>(height);
         this.cursorX = 0;
         this.cursorY = 0;
+        this.viewOffset = 0;
         this.currentFg = 7;
         this.currentBg = 0;
 
@@ -44,34 +50,43 @@ public class TerminalBuffer {
     }
 
     public void write(String text) {
-        // TODO: implement write logic with wrapping and wide-character handling.
-        List<Cell> cells = screen.get(cursorY).getLine();
+        this.viewOffset = 0; // Snap to bottom when typing
+        List<Cell> line = screen.get(this.cursorY).getLine();
         short attr = packAttributes();
         
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
-            cells.set(cursorX, new Cell(ch, attr, CellKind.NORMAL));
-            cursorX = Math.min(cursorX + 1, width - 1);
+            line.set(this.cursorX, new Cell(ch, attr, CellKind.NORMAL));
+            if (this.cursorX < width - 1) {
+                this.cursorX++;
+            }
+            else {
+                this.cursorX = 0;
+                insertLine();
+                line = screen.get(this.cursorY).getLine();
+            }
         }
     }
 
     public void insertLine() {
-        // TODO: implement rolling window line insertion.
-        if (cursorY == height - 1) {
-            // Pushing down creates a new line and pushes top to history
+        this.viewOffset = 0; // Snap to bottom when pushing new lines
+        if (this.cursorY == this.height - 1) {
             scrollback.addLast(screen.remove(0));
             if (scrollback.size() > maxScrollback) {
                 scrollback.removeFirst();
             }
-            screen.add(new Line(width, packAttributes()));
+            if (!scrollForward.isEmpty()) {
+                screen.add(scrollForward.removeFirst());
+            } else {
+                screen.add(new Line(width, packAttributes()));
+            }
         } else {
-            cursorY++;
+            this.cursorY++;
         }
-        cursorX = 0;
+        this.cursorX = 0;
     }
 
     public void moveCursor(short direction) {
-        // TODO: implement cursor movement relative to screen.
         switch (direction) {
             case 0: moveCursorUp(); break;
             case 1: moveCursorDown(); break;
@@ -81,30 +96,27 @@ public class TerminalBuffer {
     }
 
     private void moveCursorLeft(){
-        // TODO: implement cursor movement left.
-        if (cursorX > 0) {
-            cursorX--;
-        } else if (cursorY > 0) {
-            cursorY--;
-            cursorX = width - 1;
+        if (this.cursorX > 0) {
+            this.cursorX--;
+        } else if (this.cursorY > 0) {
+            this.cursorY--;
+            this.cursorX = width - 1;
         }
     }
 
     private void moveCursorRight(){
-        // TODO: implement cursor movement right.
-        if (cursorX < width - 1) {
-            cursorX++;
-        } else if (cursorY < height - 1) {
-            cursorY++;
-            cursorX = 0;
+        if (this.cursorX < width - 1) {
+            this.cursorX++;
+        } else if (this.cursorY < height - 1) {
+            this.cursorY++;
+            this.cursorX = 0;
         }
     }
 
     private void moveCursorUp(){
-        // TODO: implement cursor movement up.
-        if (cursorY > 0) {
-            cursorY--;
-        } else if (cursorY == 0 && !scrollback.isEmpty()) {
+        if (this.cursorY > 0) {
+            this.cursorY--;
+        } else if (this.cursorY == 0 && !scrollback.isEmpty()) {
             // Scroll screen down into history.
             screen.remove(screen.size() - 1);
             screen.add(0, scrollback.removeLast());
@@ -112,16 +124,19 @@ public class TerminalBuffer {
     }
 
     private void moveCursorDown(){
-        // TODO: implement cursor movement down.
-        if (cursorY < height - 1) {
-           cursorY++;
-        } else if (cursorY == height - 1) {
+        if (this.cursorY < height - 1) {
+           this.cursorY++;
+        } else if (this.cursorY == height - 1) {
             // Scroll screen up, saving top line to history.
             scrollback.addLast(screen.remove(0));
             if (scrollback.size() > maxScrollback) {
                 scrollback.removeFirst();
             }
-            screen.add(new Line(width, packAttributes()));
+            if (!scrollForward.isEmpty()) {
+                screen.add(scrollForward.removeFirst());
+            } else {
+                screen.add(new Line(width, packAttributes()));
+            }
         }
     }
 
@@ -133,40 +148,62 @@ public class TerminalBuffer {
 
     public void clearAll() {
         scrollback.clear();
+        scrollForward.clear();
         screen.clear();
         for (int i = 0; i < height; i++) {
             this.screen.add(new Line(width, packAttributes()));
         }
-        cursorX = 0;
-        cursorY = 0;
+        this.cursorX = 0;
+        this.cursorY = 0;
+        this.viewOffset = 0;
+    }
+
+    public void scrollUp() {
+        if (this.viewOffset < scrollback.size()) {
+            this.viewOffset++;
+        }
+    }
+
+    public void scrollDown() {
+        if (this.viewOffset > 0) {
+            this.viewOffset--;
+        }
+    }
+
+    public void pageUp() {
+        this.viewOffset = Math.min(scrollback.size(), this.viewOffset + Math.max(1, height / 2));
+    }
+
+    public void pageDown() {
+        this.viewOffset = Math.max(0, this.viewOffset - Math.max(1, height / 2));
     }
 
     public void toggleInsertMode() {
         if (this.insertMode) {
             // TODO: maybe change the cursor shape or color to indicate insert mode.
-            this.cursorX = Math.max(cursorX - 1, 0);
+            this.cursorX = Math.max(this.cursorX - 1, 0);
         } else {
             // Revert cursor shape or color if needed.
-            this.cursorX = Math.min(cursorX + 1, width - 1);
+            this.cursorX = Math.min(this.cursorX + 1, width - 1);
         }
         this.insertMode = !this.insertMode;
     }
 
     public void handleBackspace() {
-        // TODO: implement backspace handling.
-        if (cursorX > 0) {
-            cursorX--;
-            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
-        } else if (cursorY > 0) {
-            cursorY--;
-            cursorX = width - 1;
-            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
-        } else if (cursorY == 0 && !scrollback.isEmpty()) {
+        if (this.cursorX > 0) {
+            this.cursorX--;
+            screen.get(this.cursorY).getLine().set(this.cursorX, Cell.empty(packAttributes()));
+        } else if (this.cursorY > 0) {
+            this.cursorY--;
+            this.cursorX = width - 1;
+            screen.get(this.cursorY).getLine().set(this.cursorX, Cell.empty(packAttributes()));
+        } else if (this.cursorY == 0 && !scrollback.isEmpty()) {
             // Pull previous line from scrollback
+            scrollForward.addFirst(screen.remove(screen.size() - 1));
             screen.remove(screen.size() - 1);
             screen.add(0, scrollback.removeLast());
-            cursorX = width - 1;
-            screen.get(cursorY).getLine().set(cursorX, Cell.empty(packAttributes()));
+            this.cursorX = width - 1;
+            screen.get(this.cursorY).getLine().set(this.cursorX, Cell.empty(packAttributes()));
         }
     }
 
@@ -194,26 +231,39 @@ public class TerminalBuffer {
     }
 
     public List<Line> getScreen() {
-        return screen;
+        if (viewOffset == 0) {
+            return screen;
+        }
+        
+        List<Line> combined = getAllLines();
+        // Calculate the slice visible based on viewOffset relative to the current active screen
+        int currentScreenStart = scrollback.size();
+        int start = Math.max(0, currentScreenStart - viewOffset);
+        int end = Math.min(combined.size(), start + height);
+        return combined.subList(start, end);
     }
 
+    public int getViewOffset() {
+        return viewOffset;
+    }
 
     public List<Line> getAllLines() {
         List<Line> combined = new ArrayList<>(scrollback);
         combined.addAll(screen);
+        combined.addAll(scrollForward);
         return combined;
     }
 
     public int getCursorX() {
-        return cursorX;
+        return this.cursorX;
     }
 
     public int getCursorY() {
-        return cursorY;
+        return this.cursorY;
     }
 
     public int getCurrentFg() {
-        return currentFg;
+        return this.currentFg;
     }
 
     public void setCurrentFg(int currentFg) {
@@ -221,7 +271,7 @@ public class TerminalBuffer {
     }
 
     public int getCurrentBg() {
-        return currentBg;
+        return this.currentBg;
     }
 
     public void setCurrentBg(int currentBg) {
@@ -229,26 +279,26 @@ public class TerminalBuffer {
     }
 
     public boolean isBold() {
-        return isBold;
+        return this.isBold;
     }
 
     public void setBold(boolean bold) {
-        isBold = bold;
+        this.isBold = bold;
     }
 
     public boolean isItalic() {
-        return isItalic;
+        return this.isItalic;
     }
 
     public void setItalic(boolean italic) {
-        isItalic = italic;
+        this.isItalic = italic;
     }
 
     public boolean isUnderline() {
-        return isUnderline;
+        return this.isUnderline;
     }
 
     public void setUnderline(boolean underline) {
-        isUnderline = underline;
+        this.isUnderline = underline;
     }
 }
