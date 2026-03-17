@@ -1,67 +1,85 @@
 # Zoro Terminal
-A lightweight grid-based terminal emulator built with Java Swing.
 
-## Architecture 
-- **MVC split:** `TerminalBuffer` is the headless state engine. `TerminalView` only renders. Input is routed through dedicated handlers.
-- **Compact cells:** `Cell` packs foreground, background, and style bits into a 16-bit `short` to reduce per-cell memory overhead.
-- **Reflow-aware lines:** `Line.isWrapped` differentiates soft-wrap continuation from logical line breaks, enabling resize reflow without dropping content.
+A lightweight grid-based terminal emulator implemented in Java Swing.
+
+## Overview
+
+- Core buffer model: scrollback + screen + scroll-forward.
+- Deque-based history for O(1) line shift operations.
+- Fixed-width line grid for fast indexed access.
+- Bit-packed cell attributes (fg, bg, bold, italic, underline).
+- Resize reflow using wrapped-line metadata.
 
 ## Features
-- Scrollback + scroll-forward history using `ArrayDeque`.
-- Styled text (bold, italic, underline) and 16-color foreground/background cycling.
-- Mouse selection with clipboard copy/paste support.
-- Insert/overwrite mode toggle.
-- Width/height resize support with cursor-preserving reflow.
+
+- Bounded scrollback and scroll-forward navigation
+- 16-color foreground/background styling
+- Bold, italic, underline
+- Insert/overwrite mode
+- Mouse selection + clipboard copy/paste
+- Resize support with reflow
 
 ## Quick Start
-Prerequisite: Java 21+ installed.
+
+Prerequisite: Java 21+ (the Gradle toolchain is configured for Java 21).
 
 Windows:
 
-	.\gradlew.bat run
-
-	.\gradlew.bat test
+```powershell
+.\gradlew.bat run
+.\gradlew.bat test
+.\gradlew.bat clean build
+```
 
 macOS/Linux:
 
-	./gradlew run
-
-	./gradlew test
-
-Full build:
-
-	.\gradlew.bat clean build
+```bash
+./gradlew run
+./gradlew test
+./gradlew clean build
+```
 
 ## Keymap
 
 | Keys | Action |
 | --- | --- |
-| `Arrow Up` | Move cursor up / scroll through history at top |
-| `Arrow Down` | Move cursor down / scroll toward present at bottom |
-| `Arrow Left` | Move cursor left |
-| `Arrow Right` | Move cursor right |
-| `Insert` | Toggle insert mode |
-| `Home` | Clear visible screen |
-| `End` | Clear all (screen + history) |
-| `Backspace` | Delete character before cursor |
-| `Delete` | Delete character at cursor |
-| `Enter` | Insert new line |
-| `Tab` | Insert 4 spaces |
-| `F1` | Cycle foreground color (0-15) |
-| `F2` | Cycle background color (0-15) |
-| `Ctrl+B` | Toggle bold |
-| `Ctrl+I` | Toggle italic |
-| `Ctrl+U` | Toggle underline |
-| `Ctrl+Shift+C` | Copy selected text to clipboard |
-| `Ctrl+Shift+V` | Paste clipboard text |
-| `Esc` | Exit application |
+| Arrow Up | Move cursor up / scroll through history at top |
+| Arrow Down | Move cursor down / scroll toward present at bottom |
+| Arrow Left | Move cursor left |
+| Arrow Right | Move cursor right |
+| Insert | Toggle insert mode |
+| Home | Clear visible screen |
+| End | Clear screen and history |
+| Backspace | Delete character before cursor |
+| Delete | Delete character at cursor |
+| Enter | Insert new line |
+| Tab | Insert four spaces |
+| F1 | Cycle foreground color (0-15) |
+| F2 | Cycle background color (0-15) |
+| Ctrl+B | Toggle bold |
+| Ctrl+I | Toggle italic |
+| Ctrl+U | Toggle underline |
+| Ctrl+Shift+C | Copy selected text |
+| Ctrl+Shift+V | Paste clipboard text |
+| Esc | Exit application |
 | Printable keys | Insert typed character |
 
 ## Mouse
-- Mouse wheel: scroll history (3 lines per wheel notch).
-- Left press + drag: create/extend selection.
 
-## Shortcomings
-- Rendering and input handling are both on the Swing event thread; bursts of input can affect responsiveness.
-- No PTY backend yet; input currently writes into an internal buffer model rather than a real shell process.
-- Font metrics are calculated from Swing at runtime but not centrally cached/tuned for advanced typography scenarios.
+- Mouse wheel scrolls history (three lines per notch).
+- Left press + drag creates or extends selection.
+
+## Limitations
+
+- No PTY backend yet (buffer is model-driven)
+- Swing event thread handles both input and rendering
+- Wide-character behavior is not implemented yet
+
+## Wide-Character Support Plan
+
+- Add per-cell occupancy state: single, wide-leading, wide-trailing.
+- Classify by code point width: combining=0, normal=1, fullwidth=2.
+- Write width-2 glyphs atomically across two cells; wrap first if needed.
+- Make cursor and delete/backspace glyph-aware (not just column-aware).
+- Reflow by glyph clusters so wide glyphs are never split.
+- Add tests for boundaries, wrap, delete/backspace, and resize.
